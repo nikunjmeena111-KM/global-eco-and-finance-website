@@ -1,30 +1,39 @@
-import dotenv from "dotenv";
 import mongoose from "mongoose";
+import dotenv from "dotenv";
 
-import { getExchangeRate } from "./externalServices/exchangeRate.service.js";
-import "./models/exchangeRate.model.js"; // Ensure model loads
+import { getCountryMacroData } from "./externalServices/macroIndicators.service.js";
+import { ApiError } from "./utils/ApiError.js";
 
 dotenv.config();
 
 const runTest = async () => {
   try {
-    console.log("🔌 Connecting to MongoDB...");
+    console.log("🔌 Connecting to DB...");
     await mongoose.connect(process.env.mongodb_URL);
-    console.log("✅ MongoDB Connected\n");
+    console.log("✅ Connected to MongoDB\n");
 
-    console.log("🚀 First Call (Should hit API)");
-    const first = await getExchangeRate("USD", "INR");
-    console.log(first);
+    const country = "china";
+    const year = 2021;
 
-    console.log("\n🚀 Second Call (Should hit CACHE)");
-    const second = await getExchangeRate("USD", "INR");
-    console.log(second);
+    console.log(`📊 Fetching macro data for ${country} (${year})...\n`);
+
+    const result = await getCountryMacroData(country, year);
+
+    console.log("✅ Service Response:\n");
+    console.dir(result, { depth: null });
 
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    if (error instanceof ApiError) {
+      console.error("❌ ApiError:");
+      console.error("Status:", error.statusCode);
+      console.error("Message:", error.message);
+    } else {
+      console.error("❌ Unexpected Error:", error);
+    }
   } finally {
     await mongoose.disconnect();
-    console.log("\n🔌 MongoDB Disconnected");
+    console.log("\n🔌 Disconnected from DB");
+    process.exit();
   }
 };
 

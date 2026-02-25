@@ -1,29 +1,34 @@
 import mongoose from "mongoose";
 
 const countrySchema = new mongoose.Schema(
-  {
+  {  name:{
+    type:String,
+    required:true,
+    unique:true,
+    trim:true,
+    },
     code: {
       type: String,
       required: true,
-      unique: true,
+      //unique: true,
       uppercase: true,
       trim: true
     },
 
     indexSymbol: {
       type: String,
-      required: true,
+      default:null,
       trim: true
     },
 
     capitalGainsTax: {
       type: String,
-      required: true
+      
     },
 
     dividendTax: {
       type: String,
-      required: true
+      
     },
     exchanges: [
   {
