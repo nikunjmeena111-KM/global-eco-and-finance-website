@@ -1,39 +1,35 @@
+// src/tests/test.monetary.js
+
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-
-import { getCountryMacroData } from "./externalServices/macroIndicators.service.js";
-import { ApiError } from "./utils/ApiError.js";
+import { getMonetaryData } from "./externalServices/monetary.service.js";
 
 dotenv.config();
 
 const runTest = async () => {
   try {
-    console.log("🔌 Connecting to DB...");
+    console.log("🔌 Connecting to MongoDB...");
+
     await mongoose.connect(process.env.mongodb_URL);
-    console.log("✅ Connected to MongoDB\n");
 
-    const country = "china";
-    const year = 2021;
+    console.log("✅ MongoDB Connected");
 
-    console.log(`📊 Fetching macro data for ${country} (${year})...\n`);
+    const countryName = "China"; // Change this to test other countries
 
-    const result = await getCountryMacroData(country, year);
+    console.log(`🌍 Fetching monetary data for ${countryName}...\n`);
 
-    console.log("✅ Service Response:\n");
+    const result = await getMonetaryData(countryName);
+
+    console.log("📊 Monetary Data Result:");
     console.dir(result, { depth: null });
 
   } catch (error) {
-    if (error instanceof ApiError) {
-      console.error("❌ ApiError:");
-      console.error("Status:", error.statusCode);
-      console.error("Message:", error.message);
-    } else {
-      console.error("❌ Unexpected Error:", error);
-    }
+    console.error("❌ Test Failed:");
+    console.error(error.message || error);
   } finally {
-    await mongoose.disconnect();
-    console.log("\n🔌 Disconnected from DB");
-    process.exit();
+    await mongoose.connection.close();
+    console.log("\n🔌 MongoDB connection closed");
+    process.exit(0);
   }
 };
 
