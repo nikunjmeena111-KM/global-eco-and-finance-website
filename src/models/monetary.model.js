@@ -5,34 +5,58 @@ const monetarySchema = new mongoose.Schema(
     country: {
       type: String,
       required: true,
-      trim: true,
-      index: true
+      index: true,
+      trim: true
     },
 
     countryCode: {
-      type: String, // ISO-2 (IN, US)
+      type: String,
       required: true,
       uppercase: true
     },
+
+    // ---- Core Monetary & Financial Indicators ----
 
     policyRate: {
       type: Number,
       default: null
     },
 
-    reserveRequirement: {
+    moneySupplyM2: {
       type: Number,
       default: null
     },
 
-    year: {
+    domesticCredit: {
       type: Number,
-      required: true
+      default: null
     },
+
+    bondYield10Y: {
+      type: Number,
+      default: null
+    },
+
+    inflation: {
+      type: Number,
+      default: null
+    },
+
+    industrialProduction: {
+      type: Number,
+      default: null
+    },
+
+    // ---- Metadata ----
 
     source: {
       type: String,
-      default: "IMF"
+      default: "FRED"
+    },
+
+    year: {
+      type: Number,
+      default: null
     },
 
     lastUpdated: {
@@ -45,7 +69,7 @@ const monetarySchema = new mongoose.Schema(
   }
 );
 
-// 🔹 Ensure one monetary record per country
+// Ensure only one monetary document per country
 monetarySchema.index({ countryCode: 1 }, { unique: true });
 
 export const Monetary = mongoose.model("Monetary", monetarySchema);

@@ -1,78 +1,80 @@
-import axios from "axios";
-import { Monetary } from "../models/monetary.model.js";
 import { Country } from "../models/country.model.js";
+import { Monetary } from "../models/monetary.model.js";
+import { fetchMonetaryFromFRED } from "../adapters/fredAPI.adapter.js";
+import { ApiError } from "../utils/ApiError.js";
 
-const TE_BASE_URL = "https://api.tradingeconomics.com";
-const CACHE_EXPIRY_DAYS = 30;
+const THIRTY_DAYS = 1000 * 60 * 60 * 24 * 30;
 
-const isExpired = (lastUpdated) => {
-  const now = new Date();
-  const diffDays =
-    (now - new Date(lastUpdated)) / (1000 * 60 * 60 * 24);
-  return diffDays > CACHE_EXPIRY_DAYS;
-};
+export const getMonetaryData = async (countryInput) => {
+  try {
+    //  Resolve country (by name OR ISO2 code)
+    const country = await Country.findOne({
+      $or: [
+        { name: new RegExp(`^${countryInput}$`, "i") },
+        { code: countryInput.toUpperCase() },
+      ],
+    });
 
-const fetchPolicyRate = async (countryName) => {
-  const url = `${TE_BASE_URL}/country/${countryName}/indicator/Interest Rate?c=${process.env.TE_API_KEY}`;
-  const response = await axios.get(url);
-  return response.data?.[0] || null;
-};
-
-const fetchReserveRequirement = async (countryName) => {
-  const url = `${TE_BASE_URL}/country/${countryName}/indicator/Reserve Requirement?c=${process.env.TE_API_KEY}`;
-  const response = await axios.get(url);
-  return response.data?.[0] || null;
-};
-
-export const getMonetaryData = async (countryName) => {
-
-  //  Resolve country from DB
-  const country = await Country.findOne({ name: countryName });
-
-  if (!country) {
-    throw new Error("Country not found");
-  }
-
-  //  Check cache
-  const existing = await Monetary.findOne({
-    countryCode: country.code
-  });
-
-  if (existing && !isExpired(existing.lastUpdated)) {
-    return existing;
-  }
-
-  //  Fetch from Trading Economics
-  const [policyData, reserveData] = await Promise.all([
-    fetchPolicyRate(countryName),
-    fetchReserveRequirement(countryName)
-  ]);
-
-  const policyRate = policyData?.LatestValue ?? null;
-  const reserveRequirement = reserveData?.LatestValue ?? null;
-
-  const year =
-    policyData?.Date
-      ? new Date(policyData.Date).getFullYear()
-      : new Date().getFullYear();
-
-  // Upsert
-  const updated = await Monetary.findOneAndUpdate(
-    { countryCode: country.code },
-    {
-      country: country.name,
-      countryCode: country.code,
-      policyRate,
-      reserveRequirement,
-      year,
-      source: "TradingEconomics",
-      lastUpdated: new Date()
-    },
-    {
-      upsert: true,
-      returnDocument: "after"
+    if (!country) {
+      throw new ApiError(404, "Country not found");
     }
-  );
 
-  return updated;
+    const { name: countryName, code: countryCode } = country;
+
+    // Check cache
+    const existing = await Monetary.findOne({ countryCode });
+
+    if (existing) {
+      const isExpired =
+        Date.now() - new Date(existing.lastUpdated).getTime() >
+        THIRTY_DAYS;
+
+      if (!isExpired) {
+        return existing;
+      }
+    }
+
+    //  Fetch fresh data from adapter
+    const monetaryData = await fetchMonetaryFromFRED(countryCode);
+
+    if (!monetaryData) {
+      throw new ApiError(502, "Failed to fetch monetary data");
+    }
+
+    // Prepare unified document
+    const payload = {
+      country: countryName,
+      countryCode,
+      policyRate: monetaryData.policyRate ?? null,
+      moneySupplyM2: monetaryData.moneySupplyM2 ?? null,
+      domesticCredit: monetaryData.domesticCredit ?? null,
+      bondYield10Y: monetaryData.bondYield10Y ?? null,
+      inflation: monetaryData.inflation ?? null,
+      industrialProduction: monetaryData.industrialProduction ?? null,
+      source: "FRED",
+      year: new Date().getFullYear(),
+      lastUpdated: new Date(),
+    };
+
+    // Upsert (cache-aside pattern)
+    const updated = await Monetary.findOneAndUpdate(
+      { countryCode },
+      payload,
+      {
+          returnDocument: "after",
+          upsert: true
+      }
+    );
+
+    return updated;
+
+  } catch (error) {
+  console.error("REAL ERROR:", error);
+
+  if (error.statusCode) {
+    throw error;
+  }
+
+  throw new ApiError(500, error.message || "Monetary service failed");
+}
 };
