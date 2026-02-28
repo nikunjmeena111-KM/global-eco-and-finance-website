@@ -1,37 +1,37 @@
-import mongoose from "mongoose";
 import dotenv from "dotenv";
-import { getMonetaryData } from "./externalServices/monetary.service.js";
-
 dotenv.config();
 
-const MONGO_URI = process.env.mongodb_URL;
+import mongoose from "mongoose";
+import connectDB from "./db/index.js";
 
-if (!MONGO_URI) {
-  throw new Error("MONGO_URI not configured");
-}
+import { getInitialDashboard, getCountryDashboard } from "./dashboard/dashboard.service.js";
 
-const runTest = async () => {
+const test = async () => {
   try {
-    console.log("🔌 Connecting to MongoDB...");
-    await mongoose.connect(MONGO_URI);
-    console.log("✅ MongoDB connected\n");
+    await connectDB();
 
-    // 🇩🇪 Germany
-    console.log("🚀 Testing Germany (DE) monetary data...");
-    const germany = await getMonetaryData("ES");
-    console.log("Germany Result:\n", germany, "\n");
+    console.log("===== FINAL DASHBOARD TEST =====\n");
 
-    // 🇨🇳 China
-    console.log("🚀 Testing China (CN) monetary data...");
-    const china = await getMonetaryData("SG");
-    console.log("China Result:\n", china, "\n");
+    // ---- INITIAL DASHBOARD ----
+    const initial = await getInitialDashboard();
+
+    console.log("Initial Dashboard:",initial);
+    
+
+    console.log("\n---------------------------------\n");
+
+    // ---- COUNTRY DASHBOARD ----
+    const country = await getCountryDashboard("IN");
+
+    console.log("Country Dashboard:", country);
+    
+
+    await mongoose.connection.close();
 
   } catch (error) {
-    console.error("❌ Test failed:", error.message);
-  } finally {
-    await mongoose.disconnect();
-    console.log("🔌 MongoDB disconnected");
+    console.error("Error occurred:");
+    console.error(error);
   }
 };
 
-runTest();
+test();

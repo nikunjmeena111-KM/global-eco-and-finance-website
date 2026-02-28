@@ -9,34 +9,37 @@ import { ApiError } from "../utils/ApiError.js";
 
   const upperCode = code.toUpperCase();
 
-  // Fetch from DB
+  // Fetch from DB (MANDATORY)
   const country = await Country.findOne({ code: upperCode });
 
   if (!country) {
     throw new ApiError(404, "Country not found in database");
   }
 
-  // 2Fetch from REST Countries API
-  let countryAPIData;
+  //  Try external API (OPTIONAL ENRICHMENT)
+  let name = country.name; // fallback to DB name
+  let flag = "";
+  let currency = "N/A";
 
   try {
     const response = await axios.get(
       `https://restcountries.com/v3.1/alpha/${upperCode}`
     );
 
-    countryAPIData = response.data[0];
+    const countryAPIData = response.data[0];
+
+    name = countryAPIData?.name?.common || country.name;
+    flag = countryAPIData?.flags?.png || "";
+    currency = countryAPIData?.currencies
+      ? Object.keys(countryAPIData.currencies)[0]
+      : "N/A";
+
   } catch (error) {
-    throw new ApiError(500, "Failed to fetch country data from external API");
+    // ❗ DO NOT THROW
+    // External failure should NOT break system
+    console.warn("External country API failed, using DB fallback.");
   }
 
-  //  Extract required fields safely
-  const name = countryAPIData?.name?.common || "N/A";
-  const flag = countryAPIData?.flags?.png || "";
-  const currency = countryAPIData?.currencies
-    ? Object.keys(countryAPIData.currencies)[0]
-    : "N/A";
-
-  //  Return merged structured object
   return {
     name,
     flag,
@@ -45,9 +48,16 @@ import { ApiError } from "../utils/ApiError.js";
     investment: {
       capitalGainsTax: country.capitalGainsTax,
       dividendTax: country.dividendTax,
-      brokerageAvg: country.brokerageAvg
+      brokerageAvg: country.brokerageAvg,
     }
   };
 };
 
-export {getCountryData}
+ const getCountryList = async () => {
+  return await Country.find(
+    {},
+    { name: 1, code: 1, _id: 0 } // projection (only name & code)
+  );
+};
+
+export {getCountryData, getCountryList}
