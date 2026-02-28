@@ -90,6 +90,106 @@
     bondYield10Y: "IRLTLT01KRM156N",
     inflation: "CPALTT01KRM657N",
     industrialProduction: "KORPROINDMISMEI"
+  },
+
+  // 🇧🇷 Brazil
+  "BR": {
+    policyRate: "IRSTCI01BRM156N",
+    moneySupplyM2: "MYAGM2BRM189N",
+    domesticCredit: "DCPSBR",
+    bondYield10Y: "IRLTLT01BRM156N",
+    inflation: "CPALTT01BRM657N",
+    industrialProduction: "BRAPROINDMISMEI"
+  },
+
+  // 🇦🇺 Australia
+  "AU": {
+    policyRate: "IRSTCI01AUM156N",
+    moneySupplyM2: "MYAGM2AUM189N",
+    domesticCredit: "DCPSAU",
+    bondYield10Y: "IRLTLT01AUM156N",
+    inflation: "CPALTT01AUM657N",
+    industrialProduction: "AUSPROINDMISMEI"
+  },
+
+  // 🇪🇸 Spain
+  "ES": {
+    policyRate: "IRSTCI01ESM156N",
+    moneySupplyM2: "MYAGM2ESM189N",
+    domesticCredit: "DCPSES",
+    bondYield10Y: "IRLTLT01ESM156N",
+    inflation: "CPALTT01ESM657N",
+    industrialProduction: "ESPPROINDMISMEI"
+  },
+
+  // 🇳🇱 Netherlands
+  "NL": {
+    policyRate: "IRSTCI01NLM156N",
+    moneySupplyM2: "MYAGM2NLM189N",
+    domesticCredit: "DCPSNL",
+    bondYield10Y: "IRLTLT01NLM156N",
+    inflation: "CPALTT01NLM657N",
+    industrialProduction: "NLDPORINDMISMEI"
+  },
+
+  // 🇨🇭 Switzerland
+  "CH": {
+    policyRate: "IRSTCI01CHM156N",
+    moneySupplyM2: "MYAGM2CHM189N",
+    domesticCredit: "DCPSCH",
+    bondYield10Y: "IRLTLT01CHM156N",
+    inflation: "CPALTT01CHM657N",
+    industrialProduction: "CHEPROINDMISMEI"
+  },
+
+  // 🇷🇺 Russia
+  "RU": {
+    policyRate: "IRSTCI01RUM156N",
+    moneySupplyM2: "MYAGM2RUM189N",
+    domesticCredit: "DCPSRU",
+    bondYield10Y: "IRLTLT01RUM156N",
+    inflation: "CPALTT01RUM657N",
+    industrialProduction: "RUSPROINDMISMEI"
+  },
+
+  // 🇲🇽 Mexico
+  "MX": {
+    policyRate: "IRSTCI01MXM156N",
+    moneySupplyM2: "MYAGM2MXM189N",
+    domesticCredit: "DCPSMX",
+    bondYield10Y: "IRLTLT01MXM156N",
+    inflation: "CPALTT01MXM657N",
+    industrialProduction: "MEXPROINDMISMEI"
+  },
+
+  // 🇸🇬 Singapore
+  "SG": {
+    policyRate: "IRSTCI01SGM156N",
+    moneySupplyM2: "MYAGM2SGM189N",
+    domesticCredit: "DCPSSG",
+    bondYield10Y: "IRLTLT01SGM156N",
+    inflation: "CPALTT01SGM657N",
+    industrialProduction: "SGPPROINDMISMEI"
+  },
+
+  // 🇿🇦 South Africa
+  "ZA": {
+    policyRate: "IRSTCI01ZAM156N",
+    moneySupplyM2: "MYAGM2ZAM189N",
+    domesticCredit: "DCPSZA",
+    bondYield10Y: "IRLTLT01ZAM156N",
+    inflation: "CPALTT01ZAM657N",
+    industrialProduction: "ZAFPROINDMISMEI"
+  },
+
+  // 🇹🇷 Türkiye
+  "TR": {
+    policyRate: "IRSTCI01TRM156N",
+    moneySupplyM2: "MYAGM2TRM189N",
+    domesticCredit: "DCPSTR",
+    bondYield10Y: "IRLTLT01TRM156N",
+    inflation: "CPALTT01TRM657N",
+    industrialProduction: "TURPROINDMISMEI"
   }
 
 };

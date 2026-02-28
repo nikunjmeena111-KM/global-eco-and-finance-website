@@ -1,13 +1,14 @@
-// src/tests/test.monetary.js
-
-import dotenv from "dotenv";
 import mongoose from "mongoose";
-
-import { getMonetaryData } from "../src/externalServices/monetary.service.js";
+import dotenv from "dotenv";
+import { getMonetaryData } from "./externalServices/monetary.service.js";
 
 dotenv.config();
 
 const MONGO_URI = process.env.mongodb_URL;
+
+if (!MONGO_URI) {
+  throw new Error("MONGO_URI not configured");
+}
 
 const runTest = async () => {
   try {
@@ -15,27 +16,21 @@ const runTest = async () => {
     await mongoose.connect(MONGO_URI);
     console.log("✅ MongoDB connected\n");
 
-    console.log("🚀 Testing US monetary data...");
-    const usData = await getMonetaryData("FR");
-    console.log("US Result:\n", usData, "\n");
+    // 🇩🇪 Germany
+    console.log("🚀 Testing Germany (DE) monetary data...");
+    const germany = await getMonetaryData("ES");
+    console.log("Germany Result:\n", germany, "\n");
 
-    console.log("🚀 Testing India monetary data...");
-    const indiaData = await getMonetaryData("DE");
-    console.log("India Result:\n", indiaData, "\n");
-
-    console.log("🚀 Testing invalid country...");
-    try {
-      await getMonetaryData("XYZ");
-    } catch (error) {
-      console.log("Expected Error:", error.message);
-    }
+    // 🇨🇳 China
+    console.log("🚀 Testing China (CN) monetary data...");
+    const china = await getMonetaryData("SG");
+    console.log("China Result:\n", china, "\n");
 
   } catch (error) {
-    console.error("❌ Test failed:", error);
+    console.error("❌ Test failed:", error.message);
   } finally {
     await mongoose.disconnect();
-    console.log("\n🔌 MongoDB disconnected");
-    process.exit();
+    console.log("🔌 MongoDB disconnected");
   }
 };
 

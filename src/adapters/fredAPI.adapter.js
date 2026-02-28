@@ -1,20 +1,23 @@
 import axios from "axios";
-import { FRED_SERIES } from "../constants/FREDids.series.js";
 import { ApiError } from "../utils/ApiError.js";
+import { FRED_SERIES } from "../constants/FREDids.series.js";
 
-const BASE_URL = "https://api.stlouisfed.org/fred/series/observations";
-//console.log(process.env.FRED_API_KEY)
+const FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations";
 
-//console.log("FRED_SERIES object:", FRED_SERIES);
+
 const fetchSeries = async (seriesId) => {
-    if (!process.env.FRED_API_KEY) {
-    throw new ApiError(500, "FRED API key not configured");
-  }
+  const FRED_API_KEY = process.env.FRED_API_KEY;
+
+if (!FRED_API_KEY) {
+  throw new Error("FRED_API_KEY not configured");
+}
+
+
   try {
-    const response = await axios.get(BASE_URL, {
+    const response = await axios.get(FRED_BASE_URL, {
       params: {
         series_id: seriesId,
-        api_key: process.env.FRED_API_KEY,
+        api_key: FRED_API_KEY,
         file_type: "json",
         sort_order: "desc",
         limit: 1,
@@ -22,46 +25,58 @@ const fetchSeries = async (seriesId) => {
       timeout: 8000,
     });
 
-    const observation = response.data?.observations?.[0];
+    const observations = response.data?.observations;
 
-    if (!observation || observation.value === "." || observation.value == null) {
+    if (!observations || observations.length === 0) {
       return null;
     }
 
-    const numericValue = parseFloat(observation.value);
-    return isNaN(numericValue) ? null : numericValue;
+    const value = observations[0]?.value;
+
+    if (!value || value === ".") {
+      return null;
+    }
+
+    return Number(value);
 
   } catch (error) {
-    return null;
-  }
-};
+  throw new ApiError(502, `FRED series fetch failed for ${seriesId}`);
+}
+}
 
- const fetchMonetaryFromFRED = async (countryCode) => {
-    console.log("CountryCode:", countryCode);
-
+const fetchMonetaryFromFRED = async (countryCode) => {
   try {
     const series = FRED_SERIES[countryCode];
-    //console.log("Series Mapping:", series)
 
     if (!series) {
       throw new ApiError(400, `FRED not configured for ${countryCode}`);
     }
-//console.log("Mapping for US:", FRED_SERIES[countryCode]);
-    const [
-      policyRate,
-      moneySupplyM2,
-      domesticCredit,
-      bondYield10Y,
-      inflation,
-      industrialProduction,
-    ] = await Promise.all([
-      fetchSeries(series.policyRate),
-      fetchSeries(series.moneySupplyM2),
-      fetchSeries(series.domesticCredit),
-      fetchSeries(series.bondYield10Y),
-      fetchSeries(series.inflation),
-      fetchSeries(series.industrialProduction),
-    ]);
+
+    const safeFetch = async (seriesId) => {
+  if (!seriesId) return null;
+
+  try {
+    return await fetchSeries(seriesId);
+  } catch {
+    return null;
+  }
+};
+
+const [
+  policyRate,
+  moneySupplyM2,
+  domesticCredit,
+  bondYield10Y,
+  inflation,
+  industrialProduction,
+] = await Promise.all([
+  safeFetch(series.policyRate),
+  safeFetch(series.moneySupplyM2),
+  safeFetch(series.domesticCredit),
+  safeFetch(series.bondYield10Y),
+  safeFetch(series.inflation),
+  safeFetch(series.industrialProduction),
+]);
 
     return {
       policyRate,
@@ -70,12 +85,13 @@ const fetchSeries = async (seriesId) => {
       bondYield10Y,
       inflation,
       industrialProduction,
+      source: "FRED",
     };
 
   } catch (error) {
+    if (error instanceof ApiError) throw error;
     throw new ApiError(502, "FRED service unavailable");
   }
 };
-
 
 export{fetchMonetaryFromFRED}
