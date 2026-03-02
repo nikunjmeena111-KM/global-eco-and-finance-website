@@ -146,4 +146,27 @@ const getOrCreateStaticSnapshot = async (countryCode) => {
   return staticData;
 };
 
-export{getInitialDashboard,getCountryDashboard}
+ const refreshStaticSnapshot = async (countryCode) => {
+  const staticData = await generateStaticSnapshot(countryCode); 
+  // buildStaticLayer should fetch:
+  // monetary, macro, news, exchange, etc.
+
+  const snapshotData = {
+    version: "v1",
+    countryCode,
+    static: staticData,
+  };
+
+  await DashboardSnapshot.findOneAndUpdate(
+    { countryCode },
+    {
+      data: snapshotData,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+    },
+    { upsert: true, returnDocument: "after" }
+  );
+
+  return snapshotData;
+};
+
+export{getInitialDashboard,getCountryDashboard,refreshStaticSnapshot,generateStaticSnapshot}

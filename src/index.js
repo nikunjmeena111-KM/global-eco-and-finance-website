@@ -2,6 +2,7 @@ import dotenv from "dotenv"
 import connectDb from "./db/index.js"
 import { app } from "./app.js";
 import { connectRedis } from "./db/redisClient.js";
+import {startSnapshotRefreshJob} from "./backgroundJobs/snapshotRefresh.job.js";
 
 
 
@@ -32,3 +33,4 @@ connectDb()
 })
 
 await connectRedis();
+startSnapshotRefreshJob();
