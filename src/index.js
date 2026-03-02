@@ -1,6 +1,8 @@
 import dotenv from "dotenv"
 import connectDb from "./db/index.js"
 import { app } from "./app.js";
+import { connectRedis } from "./db/redisClient.js";
+
 
 
 dotenv.config({
@@ -10,6 +12,7 @@ dotenv.config({
 
 
 connectDb()
+
 
 .then(()=>{
 
@@ -27,3 +30,5 @@ connectDb()
 .catch((error)=>{
     console.log("mongodb connection failed !!!",error);
 })
+
+await connectRedis();

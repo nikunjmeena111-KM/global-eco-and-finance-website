@@ -1,5 +1,3 @@
-// src/modules/dashboard/dashboard.service.js
-
 import { ApiError } from "../utils/ApiError.js";
 
 import { getCountryData,getCountryList  } from "../externalServices/country.service.js";
@@ -7,6 +5,9 @@ import { getExchangeRate } from "../externalServices/exchangeRate.service.js";
 import { getMonetaryData } from "../externalServices/monetary.service.js";
 import { getGlobalNews } from "../externalServices/news.service.js";
 import { getStockQuote } from "../externalServices/stock.service.js";
+
+import {DashboardSnapshot} from "../models/dashboardSnapshot.model.js";
+import { getCache, setCache } from "../utils/cacheHandler.js";
 
 
 
@@ -34,70 +35,115 @@ const getInitialDashboard = async () => {
 
 
 
-// COUNTRY DASHBOARD SNAPSHOT (v1)
+  // COUNTRY DASHBOARD SNAPSHOT (v1)
 
-const getCountryDashboard = async (countryCode) => {
+   const SNAPSHOT_TTL_MINUTES = 5;
 
-  // hard fail — Missing country code
+  const getCountryDashboard = async (countryCode) => {
   if (!countryCode) {
     throw new ApiError(400, "Country code is required");
   }
 
-  //  HARD FAIL — Invalid country
-  const countryMeta = await getCountryData(countryCode);
-  if (!countryMeta) {
-    throw new ApiError(404, "Country not found");
-  }
+  const upperCode = countryCode.toUpperCase();
 
-  //  HARD FAIL — Monetary must exist
-  let monetary;
-  try {
-    monetary = await getMonetaryData(countryCode);
-  } catch (error) {
-    throw new ApiError(500, "Failed to fetch monetary data");
-  }
+  const redisKey = `dashboard:v1:${upperCode}`;
 
-  //  SOFT FAIL — News (optional fallback later)
-  let news = [];
-  try {
-    news = await getGlobalNews(); // later replace with country-specific
-  } catch (error) {
-    news = [];
-  }
+  // 1️ Check Redis First
+  const cachedData = await getCache(redisKey);
 
-  //  SOFT FAIL — Stock (high volatility)
-  let stockIndex = null;
-  try {
-    if (countryMeta.indexSymbol) {
-      stockIndex = await getStockQuote(countryMeta.indexSymbol);
-    }
-  } catch (error) {
-    stockIndex = null;
+  if (cachedData) {
+     console.log(" Redis HIT");
+  return cachedData;
   }
+  console.log(" Redis MISS");
+
+  // 1Get static snapshot
+  const staticSnapshot = await getOrCreateStaticSnapshot(upperCode);
+
+  // Fetch dynamic data fresh
+  const stockQuote = await getStockQuote(upperCode).catch(() => null);
+
+  //  Merge into final structure
+  const finalResponse= {
+    version: staticSnapshot.version,
+    countryCode: staticSnapshot.countryCode,
+
+    static: staticSnapshot.static,
+
+    dynamic: {
+      stockIndex: stockQuote || null,
+    },
+  };
+
+  // Store in Redis (60 sec TTL)
+   await setCache(redisKey, finalResponse, 60);
+
+   return finalResponse;
+
+};
+
+const generateStaticSnapshot = async (countryCode) => {
+  const [
+    countryData,
+    monetaryData,
+    newsData,
+    defaultExchange
+  ] = await Promise.all([
+    getCountryData(countryCode),
+    getMonetaryData(countryCode),
+    getGlobalNews(),               // FIX NEWS
+    getExchangeRate("USD", "INR")  // DEFAULT EXCHANGE
+  ]); 
 
   return {
     version: "v1",
     countryCode,
-    generatedAt: new Date().toISOString(),
-
     static: {
-      countryMeta: {
-        name: countryMeta.name,
-        code: countryMeta.code,
-        indexSymbol: countryMeta.indexSymbol,
-        brokerageAvg: countryMeta.brokerageAvg,
-        exchanges: countryMeta.exchanges,
-      },
-
-      monetary,
-      news,
-    },
-
-    dynamic: {
-      stockIndex,
-    },
+      country: countryData,
+      monetary: monetaryData,
+      news: newsData,
+      exchange: defaultExchange
+    }
   };
 };
 
+//const SNAPSHOT_TTL_MINUTES = 5;
+
+const getOrCreateStaticSnapshot = async (countryCode) => {
+
+  //const SNAPSHOT_TTL_MINUTES = 5;
+  const upperCode = countryCode.toUpperCase();
+  const now = new Date();
+
+  const existingSnapshot = await DashboardSnapshot.findOne({
+    countryCode: upperCode,
+    version: "v1",
+  });
+
+  if (existingSnapshot && existingSnapshot.expiresAt > now) {
+    return existingSnapshot.data;
+  }
+
+  const staticData = await generateStaticSnapshot(upperCode);
+
+  const expiresAt = new Date(
+    now.getTime() + SNAPSHOT_TTL_MINUTES * 60 * 1000
+  );
+
+  await DashboardSnapshot.findOneAndUpdate(
+    { countryCode: upperCode, version: "v1" },
+    {
+      data: staticData,
+      expiresAt,
+    },
+    {
+      upsert: true,
+      returnDocument: "after",
+      setDefaultsOnInsert: true,
+    }
+  );
+
+  return staticData;
+};
 
 export{getInitialDashboard,getCountryDashboard}
