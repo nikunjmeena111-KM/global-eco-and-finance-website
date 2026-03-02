@@ -60,7 +60,7 @@ for (let i = 0; i < countries.length; i += BATCH_SIZE) {
   );
 }
 
-      console.log(" Cron: Snapshot refresh completed");
+      console.log(" Cron: Snapshotrefresh completed");
     } catch (error) {
       console.error("Cron job error:", error.message);
     }
