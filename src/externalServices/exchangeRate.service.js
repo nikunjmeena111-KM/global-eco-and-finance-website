@@ -64,6 +64,7 @@ const CACHE_DURATION = 10 * 60 * 1000;
   } catch (error) {
     throw new ApiError(
       500,
+      console.error("Exchange API error:", error.response?.data || error.message),
       error.response?.data?.error || "Failed to fetch exchange rate"
     );
   }
