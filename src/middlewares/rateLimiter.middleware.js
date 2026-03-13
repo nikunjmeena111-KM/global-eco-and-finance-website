@@ -1,16 +1,30 @@
 import rateLimit from "express-rate-limit";
+import { RedisStore } from "rate-limit-redis";
+import { redisClient } from "../db/redisClient.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
 
+// Redis Store Configuration
+
+
+const createRedisStore= () => {
+  return new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+  });
+};
+
+
+
 // Global API Rate Limiter
-// Protects the entire API from excessive requests
+// Protects the entire API
 
 
  const globalRateLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 100, // max 100 requests per IP per minute
+  max: 100, // 100 requests per IP
   standardHeaders: true,
   legacyHeaders: false,
+  store: createRedisStore(),
 
   handler: (req, res) => {
     return res
@@ -27,14 +41,14 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 
 
 
-
-//Heavy Endpoint Limiter
-//For expensive endpoints like dashboard and macro data
+// Heavy Endpoint Limiter
+//For expensive endpoints (dashboard, macro)
 
 
  const heavyEndpointLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 30, // stricter limit
+  windowMs: 60 * 1000,
+  max: 3,
+  store: createRedisStore(),
 
   handler: (req, res) => {
     return res
@@ -50,15 +64,14 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 });
 
 
-
-
-//Exchange Rate Limiter
-//Prevents abuse of currency conversion endpoint
+// Exchange Endpoint Limiter
+//Protects currency conversion endpoint
 
 
  const exchangeLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 50,
+  store:createRedisStore(),
 
   handler: (req, res) => {
     return res
@@ -76,13 +89,14 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 
 
 
-// Authentication Limiter (Future Use)
-// Protects login/register endpoints from brute-force attacks
+// Authentication Limiter
+// Prevent brute-force login attempts
 
 
  const authLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
+  store: createRedisStore(),
 
   handler: (req, res) => {
     return res
@@ -96,6 +110,5 @@ import { ApiResponse } from "../utils/ApiResponse.js";
       );
   },
 });
-
 
 export{globalRateLimiter,heavyEndpointLimiter,exchangeLimiter,authLimiter}

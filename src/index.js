@@ -1,36 +1,38 @@
-import dotenv from "dotenv"
-import connectDb from "./db/index.js"
+import dotenv from "dotenv";
+import connectDb from "./db/index.js";
 import { app } from "./app.js";
-import { connectRedis } from "./db/redisClient.js";
-import {startSnapshotRefreshJob} from "./backgroundJobs/snapshotRefresh.job.js";
-
-
+//import { connectRedis } from "./db/redisClient.js";
+import { startSnapshotRefreshJob } from "./backgroundJobs/snapshotRefresh.job.js";
 
 dotenv.config({
-    path:'./env'
-})
+  path: "./env",
+});
 
+const startServer = async () => {
+  try {
 
+    // Connect MongoDB
+    await connectDb();
+    console.log("MongoDB Connected");
 
-connectDb()
+    // Connect Redis
+    //await connectRedis();
+    //console.log("Redis Connected");
 
+    // Start server
+    const PORT = process.env.PORT || 7000;
 
-.then(()=>{
+    app.listen(PORT, () => {
+      console.log(`Server running on port: ${PORT}`);
+    });
 
-    app.on("error",(error)=>{
-            console.log("error in listning",error)
-            throw error
-        })
+    // Start cron jobs
+    startSnapshotRefreshJob();
 
-    app.listen(process.env.PORT||7000 ,()=>{
-        console.log(`server is running at port:${process.env.PORT}`);
-        
-    })
+  } catch (error) {
+    console.error("Server startup failed:", error);
+    process.exit(1);
+  }
+};
 
-})
-.catch((error)=>{
-    console.log("mongodb connection failed !!!",error);
-})
-
-await connectRedis();
-startSnapshotRefreshJob();
+startServer();
