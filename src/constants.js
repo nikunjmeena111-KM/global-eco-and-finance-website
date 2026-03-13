@@ -1,6 +1,6 @@
-export const DB_Name= "financialData"
+ const DB_Name= "financialData"
 
-export const INDICATORS = {
+ const INDICATORS = {
   GDP: {
     code: "NY.GDP.MKTP.CD",
     name: "GDP (current US$)",
@@ -8,7 +8,7 @@ export const INDICATORS = {
   GDP_GROWTH: {
     code: "NY.GDP.MKTP.KD.ZG",
     name: "GDP Growth (%)",
-  },
+  }, 
   INFLATION: {
     code: "FP.CPI.TOTL.ZG",
     name: "Inflation (CPI %)",
@@ -18,3 +18,5 @@ export const INDICATORS = {
     name: "Unemployment (%)",
   },
 };
+
+export{DB_Name,INDICATORS}

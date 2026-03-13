@@ -20,15 +20,18 @@ const macroIndicatorSchema = new mongoose.Schema(
       required: true,
     },
 
-    value: {
-      type: Number,
-      required: true,
-    },
-
-    year: {
-      type: Number,
-      required: true,
-    },
+    data: [
+      {
+        year: {
+          type: Number,
+          required: true
+        },
+        value: {
+          type: Number,
+          required: true
+        }
+      }
+    ],
 
     source: {
       type: String,
@@ -48,9 +51,9 @@ const macroIndicatorSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Prevent duplicate same country + indicator + year
+// prevent duplicate country + indicator
 macroIndicatorSchema.index(
-  { countryCode: 1, indicatorCode: 1, year: 1 },
+  { countryCode: 1, indicatorCode: 1 },
   { unique: true }
 );
 

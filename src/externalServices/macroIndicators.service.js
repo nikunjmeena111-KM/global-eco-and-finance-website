@@ -2,6 +2,7 @@ import axios from "axios";
 import { MacroIndicator } from "../models/macroIndicators.model.js";
 import { Country } from "../models/country.model.js";
 import { ApiError } from "../utils/ApiError.js";
+import {redisClient} from "../db/redisClient.js";
 
 const INDICATORS = {
   GDP: "NY.GDP.MKTP.CD",
@@ -11,6 +12,7 @@ const INDICATORS = {
 };
 
 const CACHE_DAYS = 30;
+const REDIS_TTL = 60 * 60 * 24; // 24 hours
 
 // Convert country name → countryCode
 const getCountryCodeByName = async (countryName) => {
@@ -25,94 +27,115 @@ const getCountryCodeByName = async (countryName) => {
   return country.code;
 };
 
-const fetchIndicator = async (countryCode, indicatorCode, year) => {
+const fetchIndicator = async (countryCode, indicatorKey, indicatorCode) => {
+  const redisKey = `macro:${countryCode}:${indicatorKey}`;
+  console.log("Checking Redis for:", redisKey);
+
+  // Redis check
+ const cachedRedis = await redisClient.get(redisKey);
+if (cachedRedis) {
+  console.log("Redis HIT:", redisKey);
+  return JSON.parse(cachedRedis);
+}
+
   const now = new Date();
 
+  //  Mongo check
   const existing = await MacroIndicator.findOne({
     countryCode,
     indicatorCode,
-    year,
   });
 
-  // Return cached if valid
-  if (existing && existing.expiry > now) {
-    return existing.value;
-  }
+  if (existing && existing.expiry > now && existing.data) {
+  await redisClient.set(redisKey, JSON.stringify(existing.data), {
+    EX: REDIS_TTL,
+  });
 
-  const url = `https://api.worldbank.org/v2/country/${countryCode}/indicator/${indicatorCode}?date=${year}&format=json`;
-  //console.log("URL:", url);
+  return existing.data;
+}
+
+  //  Fetch full history from World Bank
+  const url = `https://api.worldbank.org/v2/country/${countryCode}/indicator/${indicatorCode}?format=json&per_page=200`;
 
   let response;
 
   try {
     response = await axios.get(url);
-    //console.log("API RAW RESPONSE:", response.data);
   } catch (error) {
     throw new ApiError(502, "Failed to fetch data from World Bank");
   }
-  const data = response.data?.[1];
-  const value = data?.[0]?.value ?? null;
 
-if (value === null) {
-  throw new ApiError(
-    404,
-    "Indicator data not available for this year"
-  );
-}
+  const rawData = response?.data?.[1];
+
+  if (!rawData) {
+    throw new ApiError(404, "Indicator data not available");
+  }
   
+  const cleanedData = rawData
+  .filter((item) => item && item.value !== null && item.date)
+  .map((item) => ({
+    year: parseInt(item.date),
+    value: Number(item.value),
+  }))
+  .sort((a, b) => b.year - a.year);
+
 
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + CACHE_DAYS);
 
   const updated = await MacroIndicator.findOneAndUpdate(
-    { countryCode, indicatorCode, year },
+    { countryCode, indicatorCode },
     {
       countryCode,
       indicatorCode,
-      indicatorName: data[0].indicator.value,
-      value: data[0].value,
-      year,
+      indicatorName: rawData?.[0]?.indicator?.value,
+      data: cleanedData,
       lastUpdated: now,
       expiry: expiryDate,
     },
-    { returnDocument: "after", upsert: true }
+   {
+    new: true,
+    upsert: true,
+     setDefaultsOnInsert: true,
+  }
   );
+  console.log("Saved to Mongo:", indicatorKey);
 
-  return updated.value;
+ // Save to Redis
+await redisClient.set(redisKey, JSON.stringify(cleanedData), {
+  EX: REDIS_TTL,
+});
+
+return cleanedData;
+
+ //console.log("RAW API DATA:", rawData.slice(0,5));
 };
 
- const getCountryMacroData = async (countryName, year) => {
+const getCountryMacroData = async (countryName) => {
   if (!countryName) {
     throw new ApiError(400, "Country name is required");
   }
 
-  if (!year) {
-    throw new ApiError(400, "Year is required");
-  }
-
   const countryCode = await getCountryCodeByName(countryName);
 
-  
- const indicatorEntries = Object.entries(INDICATORS);
+  const indicatorEntries = Object.entries(INDICATORS);
 
-const values = await Promise.all(
-  indicatorEntries.map(([key, indicatorCode]) =>
-    fetchIndicator(countryCode, indicatorCode, year)
-  )
-);
+  const values = await Promise.all(
+    indicatorEntries.map(([key, indicatorCode]) =>
+      fetchIndicator(countryCode, key, indicatorCode)
+    )
+  );
+   //console.log("Macro values:", values);
+  const result = {};
 
-const result = {};
-
-indicatorEntries.forEach(([key], index) => {
-  result[key] = values[index];
-});
+  indicatorEntries.forEach(([key], index) => {
+    result[key] = values[index];  
+  });
 
   return {
     country: countryName,
-    year,
     macro: result,
   };
 };
 
-
-export {getCountryMacroData}
+export { getCountryMacroData };

@@ -3,6 +3,7 @@ import cors from "cors"
 import cookieParser from "cookie-parser"
 import dashboardRoutes from "./dashboard/dashboard.routes.js"
 import exchangeRoutes from "./routes/exchangeRate.routes.js";
+import macroRoutes from "./routes/macroIndicators.routes.js";
 
 const app= express()
 
@@ -19,5 +20,7 @@ app.use(cookieParser())
 app.use("/api/v1/dashboard", dashboardRoutes)
 
 app.use("/api/v1/exchangerates", exchangeRoutes);
+
+app.use("/api/v1/macro", macroRoutes);
 
 export {app}

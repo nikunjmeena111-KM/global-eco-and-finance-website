@@ -19,16 +19,16 @@ const startSnapshotRefreshJob = () => {
 for (let i = 0; i < countries.length; i += BATCH_SIZE) {
   const batch = countries.slice(i, i + BATCH_SIZE);
 
-  console.log(
+ /* console.log(
     `🚀 Processing batch ${i / BATCH_SIZE + 1} (size: ${batch.length})`
-  );
+  );*/
 
   await Promise.all(
     batch.map(async (country) => {
       const upperCode = country.code.toUpperCase();
 
       try {
-        console.log(`⏳ Refreshing snapshot for ${upperCode}`);
+       // console.log(`⏳ Refreshing snapshot for ${upperCode}`);
 
         const staticData = await generateStaticSnapshot(upperCode);
 
