@@ -4,6 +4,7 @@ import { calculateInflation } from "../utils/financialFormulas.js";
 import { getCountryMacroData } from "../externalServices/macroIndicators.service.js";
 import { INVESTMENT_RULES } from "../constants/investmentRules.js";
 import { ApiError } from "../utils/ApiError.js";
+import logger from "../utils/logger.js";
 
 
 const calculateCompoundInterest = (
@@ -11,7 +12,9 @@ const calculateCompoundInterest = (
    rate,
    years,
    frequency
-) => {
+  ) => {
+
+   logger.debug({ layer: "service", service: "compoundInterest", message: "Calculation started" });
 
    const finalAmount = compoundInterest(
       principal,
@@ -21,6 +24,8 @@ const calculateCompoundInterest = (
    );
 
    const interestEarned = finalAmount - principal;
+
+   logger.debug({ layer: "service", service: "compoundInterest", message: "Calculation completed" });
 
    return {
       principal,
@@ -38,6 +43,8 @@ const calculateCompoundInterest = (
 
 const emiCalculatorService = (principal, rate, years) => {
 
+   logger.debug({ layer: "service", service: "emiCalculator", message: "Calculation started" });
+
    const emi = calculateEMI(principal, rate, years);
 
    const months = years * 12;
@@ -45,6 +52,8 @@ const emiCalculatorService = (principal, rate, years) => {
    const totalPayment = emi * months;
 
    const totalInterest = totalPayment - principal;
+
+   logger.debug({ layer: "service", service: "emiCalculator", message: "Calculation completed" });
 
    return {
       principal,
@@ -61,7 +70,14 @@ const emiCalculatorService = (principal, rate, years) => {
 
 
 const inflationCalculatorService = ({ amount, rate, years }) => {
-  return calculateInflation(amount, rate, years);
+
+  logger.debug({ layer: "service", service: "inflationCalculator", message: "Calculation started" });
+
+  const result = calculateInflation(amount, rate, years);
+
+  logger.debug({ layer: "service", service: "inflationCalculator", message: "Calculation completed" });
+
+  return result;
 };
 
 
@@ -69,48 +85,53 @@ const inflationCalculatorService = ({ amount, rate, years }) => {
 
 const inflationByCountryService = async ({ country, amount, years, targetYear }) => {
 
+  logger.debug({ layer: "service", service: "inflationByCountry", message: "Fetching macro data", country });
+
   const macroData = await getCountryMacroData(country);
 
   const inflationArray = macroData?.macro?.INFLATION;
 
   if (!inflationArray || inflationArray.length === 0) {
+    logger.error({ layer: "service", service: "inflationByCountry", message: "Inflation data not available", country });
     throw new ApiError(404, "Inflation data not available");
   }
 
-let inflationRate;
-let selectedYear;
+ let inflationRate;
+ let selectedYear;
 
-if (targetYear) {
+ if (targetYear) {
   const yearData = inflationArray.find(
     (item) => item.year === targetYear
   );
 
   if (!yearData) {
+    logger.error({ layer: "service", service: "inflationByCountry", message: "Year data not found", targetYear });
     throw new ApiError(404, "Inflation data not available for selected year");
   }
 
   inflationRate = yearData.value;
   selectedYear = yearData.year;
 
-} else {
+  } else {
   const latestData = inflationArray.reduce((latest, curr) =>
     curr.year > latest.year ? curr : latest
   );
 
   inflationRate = latestData.value;
   selectedYear = latestData.year;
-}
+ }
 
  const result = calculateInflation(amount, inflationRate, years);
+
+ logger.debug({ layer: "service", service: "inflationByCountry", message: "Calculation completed", country });
 
  return {
   country,
   selectedYear,
   inflationRate,
   ...result
-};
+ };
 }
-
 
 
 
@@ -129,6 +150,9 @@ const getTaxSlab = (income) => {
 };
 
 const investmentFeeCalculatorService = (data) => {
+
+  logger.debug({ layer: "service", service: "investmentCalculator", message: "Calculation started", type: data.investmentType });
+
   const {
     investmentType,
     residency,
@@ -139,30 +163,28 @@ const investmentFeeCalculatorService = (data) => {
     instrumentType
   } = data;
 
-  // ===============================
-  // VALIDATION
-  // ===============================
   if (!INVESTMENT_RULES[investmentType]) {
+    logger.error({ layer: "service", service: "investmentCalculator", message: "Invalid investment type" });
     throw new ApiError(400, "Invalid investment type");
   }
 
   const rules = INVESTMENT_RULES[investmentType][residency];
 
   if (!rules) {
+    logger.error({ layer: "service", service: "investmentCalculator", message: "Invalid residency" });
     throw new ApiError(400, "Invalid residency");
   }
 
   if (!amount || amount <= 0) {
+    logger.error({ layer: "service", service: "investmentCalculator", message: "Invalid amount" });
     throw new ApiError(400, "Valid amount required");
   }
 
   if (!transactionType) {
+    logger.error({ layer: "service", service: "investmentCalculator", message: "Transaction type missing" });
     throw new ApiError(400, "Transaction type required");
   }
 
-  // ===============================
-  // CHARGES CALCULATION
-  // ===============================
   let totalCharges = 0;
   let breakdown = {};
 
@@ -179,6 +201,7 @@ const investmentFeeCalculatorService = (data) => {
 
     if (investmentType === "fno") {
       if (!instrumentType) {
+        logger.error({ layer: "service", service: "investmentCalculator", message: "Instrument type missing" });
         throw new ApiError(400, "Instrument type required");
       }
 
@@ -209,9 +232,6 @@ const investmentFeeCalculatorService = (data) => {
     };
   }
 
-  // ===============================
-  // MUTUAL FUND
-  // ===============================
   if (investmentType === "mutualFund") {
     const expense = (rules.expenseRatio / 100) * amount * years;
     const stampDuty = (rules.stampDuty / 100) * amount;
@@ -224,9 +244,6 @@ const investmentFeeCalculatorService = (data) => {
     };
   }
 
-  // ===============================
-  // RETURNS
-  // ===============================
   let finalValue = amount;
   let profit = 0;
 
@@ -236,13 +253,9 @@ const investmentFeeCalculatorService = (data) => {
     profit = finalValue - amount;
   }
 
-  // ===============================
-  // TAX CALCULATION
-  // ===============================
   let tax = 0;
   let taxType = "none";
 
-  // EQUITY / MF / GOLD
   if (
     investmentType === "equity" ||
     investmentType === "mutualFund" ||
@@ -265,31 +278,25 @@ const investmentFeeCalculatorService = (data) => {
     }
   }
 
-  // F&O (business income)
   if (investmentType === "fno") {
     taxType = "businessIncome";
     const slab = getTaxSlab(profit);
     tax = (slab / 100) * profit;
   }
 
-  // FIXED INCOME
   if (investmentType === "fixedIncome") {
     taxType = "slab";
     const slab = getTaxSlab(profit);
     tax = (slab / 100) * profit;
   }
 
-  // ===============================
-  // ADD 4% CESS
-  // ===============================
   const cess = 0.04 * tax;
   tax = tax + cess;
 
-  // ===============================
-  // FINAL
-  // ===============================
   const netProfitBeforeTax = profit - totalCharges;
   const netProfitAfterTax = netProfitBeforeTax - tax;
+
+  logger.debug({ layer: "service", service: "investmentCalculator", message: "Calculation completed" });
 
   return {
     message: "Investment calculation completed",
@@ -316,8 +323,10 @@ const investmentFeeCalculatorService = (data) => {
 };
   
 
-
-
-
-export{calculateCompoundInterest,emiCalculatorService,inflationCalculatorService,
-       inflationByCountryService,investmentFeeCalculatorService}
+export{
+  calculateCompoundInterest,
+  emiCalculatorService,
+  inflationCalculatorService,
+  inflationByCountryService,
+  investmentFeeCalculatorService
+};

@@ -3,6 +3,7 @@ import { MacroIndicator } from "../models/macroIndicators.model.js";
 import { Country } from "../models/country.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import {redisClient} from "../db/redisClient.js";
+import logger from "../utils/logger.js";
 
 const INDICATORS = {
   GDP: "NY.GDP.MKTP.CD",
@@ -14,26 +15,37 @@ const INDICATORS = {
 const CACHE_DAYS = 30;
 const REDIS_TTL = 60 * 60 * 24; // 24 hours
 
+
+
 // Convert country name → countryCode
 const getCountryCodeByName = async (countryName) => {
+  logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryCodeByName", message: "Started", countryName });
+
   const country = await Country.findOne({
     name: { $regex: new RegExp(`^${countryName}$`, "i") },
   });
 
   if (!country) {
+    logger.error({ layer: "externalService", service: "macroIndicators", action: "getCountryCodeByName", message: "Country not supported", countryName });
     throw new ApiError(404, "Country not supported");
   }
 
   return country.code;
 };
 
+
+
+
 const fetchIndicator = async (countryCode, indicatorKey, indicatorCode) => {
+  logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Started", countryCode, indicatorKey });
+
   const redisKey = `macro:${countryCode}:${indicatorKey}`;
   console.log("Checking Redis for:", redisKey);
 
   // Redis check
  const cachedRedis = await redisClient.get(redisKey);
 if (cachedRedis) {
+  logger.debug({ layer: "cache", service: "macroIndicators", action: "fetchIndicator", message: "Redis HIT", redisKey });
   console.log("Redis HIT:", redisKey);
   return JSON.parse(cachedRedis);
 }
@@ -51,6 +63,8 @@ if (cachedRedis) {
     EX: REDIS_TTL,
   });
 
+  logger.info({ layer: "cache", service: "macroIndicators", action: "fetchIndicator", message: "Mongo HIT", countryCode, indicatorKey });
+
   return existing.data;
 }
 
@@ -60,14 +74,18 @@ if (cachedRedis) {
   let response;
 
   try {
+    logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Calling external API", indicatorKey });
+
     response = await axios.get(url);
   } catch (error) {
+    logger.error({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", error: error.message });
     throw new ApiError(502, "Failed to fetch data from World Bank");
   }
 
   const rawData = response?.data?.[1];
 
   if (!rawData) {
+    logger.error({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "No data returned", indicatorKey });
     throw new ApiError(404, "Indicator data not available");
   }
   
@@ -106,13 +124,22 @@ await redisClient.set(redisKey, JSON.stringify(cleanedData), {
   EX: REDIS_TTL,
 });
 
+logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Data processed and cached", indicatorKey });
+
 return cleanedData;
 
  //console.log("RAW API DATA:", rawData.slice(0,5));
 };
 
+
+
+
+
 const getCountryMacroData = async (countryName) => {
+  logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Started", countryName });
+
   if (!countryName) {
+    logger.error({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Country name missing" });
     throw new ApiError(400, "Country name is required");
   }
 
@@ -132,10 +159,17 @@ const getCountryMacroData = async (countryName) => {
     result[key] = values[index];  
   });
 
+  logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Success", countryName });
+
   return {
     country: countryName,
     macro: result,
   };
 };
+
+
+
+
+
 
 export { getCountryMacroData };

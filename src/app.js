@@ -7,6 +7,8 @@ import macroRoutes from "./routes/macroIndicators.routes.js";
 import calculatorRoutes from "./routes/calculator.routes.js";
 import { globalRateLimiter } from "./middlewares/rateLimiter.middleware.js";
 import helmet from "helmet";
+import { requestLogger } from "./middlewares/logger.middleware.js";
+import logger from "./utils/logger.js";
 
 const app= express()
 
@@ -27,6 +29,9 @@ app.use(express.static("public"))
 app.use(cookieParser())
 
 app.use(globalRateLimiter);
+
+app.use(requestLogger);
+logger.info({ message: "LOGGER TEST START" });
 
 app.use("/api/v1/dashboard", dashboardRoutes)
 

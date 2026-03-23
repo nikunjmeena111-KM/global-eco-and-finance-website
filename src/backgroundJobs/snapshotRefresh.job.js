@@ -3,11 +3,13 @@ import { generateStaticSnapshot } from "../dashboard/dashboard.service.js";
 import {DashboardSnapshot} from "../models/dashboardSnapshot.model.js";
 import {Country} from "../models/country.model.js";
 import { redisClient } from "../db/redisClient.js";
+import logger from "../utils/logger.js";
 
 const SNAPSHOT_TTL_MINUTES = 5;
 
 const startSnapshotRefreshJob = () => {
   cron.schedule("*/4 * * * *", async () => {
+    logger.info({ layer: "cron", job: "snapshotRefresh", message: "Started" });
     console.log(" Cron: Snapshot refresh started");
 
     try {
@@ -52,16 +54,20 @@ for (let i = 0; i < countries.length; i += BATCH_SIZE) {
         const redisKey = `dashboard:v1:${upperCode}`;
         await redisClient.del(redisKey);
 
-        console.log(` Refreshed & cache cleared for ${upperCode}`);
+       // logger.info({ layer: "cron", job: "snapshotRefresh", message: "Refreshed", countryCode: upperCode });
+        //console.log(` Refreshed & cache cleared for ${upperCode}`);
       } catch (error) {
+        //logger.error({ layer: "cron", job: "snapshotRefresh", countryCode: upperCode, error: error.message });
         console.error(` Failed for ${upperCode}:`, error.message);
       }
     })
   );
 }
 
+      logger.info({ layer: "cron", job: "snapshotRefresh", message: "Completed" });
       console.log(" Cron: Snapshotrefresh completed");
     } catch (error) {
+      //logger.error({ layer: "cron", job: "snapshotRefresh", error: error.message });
       console.error("Cron job error:", error.message);
     }
   });

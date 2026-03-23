@@ -2,10 +2,13 @@ import { Monetary } from "../models/monetary.model.js";
 import { Country } from "../models/country.model.js";
 import { fetchMonetaryFromFRED } from "../adapters/fredAPI.adapter.js";
 import { ApiError } from "../utils/ApiError.js";
+import logger from "../utils/logger.js";
 
 const CACHE_EXPIRY_DAYS = 30;
 
- const getMonetaryData = async (countryInput) => {
+const getMonetaryData = async (countryInput) => {
+  logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Started", countryInput });
+
   try {
     //  Resolve country from DB
    const country = await Country.findOne({
@@ -16,6 +19,7 @@ const CACHE_EXPIRY_DAYS = 30;
 });
 
     if (!country) {
+      logger.error({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Country not found", countryInput });
       throw new ApiError(404, "Country not found");
     }
 
@@ -31,11 +35,14 @@ const CACHE_EXPIRY_DAYS = 30;
         (1000 * 60 * 60 * 24);
 
       if (diffDays < CACHE_EXPIRY_DAYS) {
+        logger.info({ layer: "cache", service: "monetary", action: "getMonetaryData", message: "Mongo HIT", countryCode });
         return existingData;
       }
     }
 
     //  Fetch fresh data from FRED
+    logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Fetching from FRED", countryCode });
+
     const freshData = await fetchMonetaryFromFRED(countryCode);
 
     // Upsert into DB
@@ -54,9 +61,13 @@ const CACHE_EXPIRY_DAYS = 30;
       }
     );
 
+    logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Success", countryCode });
+
     return updated;
 
   } catch (error) {
+    logger.error({ layer: "externalService", service: "monetary", action: "getMonetaryData", error: error.message });
+
     if (error instanceof ApiError) throw error;
     throw new ApiError(500, "Monetary service failed");
   }

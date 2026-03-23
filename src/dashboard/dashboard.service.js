@@ -8,17 +8,22 @@ import { getStockQuote } from "../externalServices/stock.service.js";
 
 import {DashboardSnapshot} from "../models/dashboardSnapshot.model.js";
 import { getCache, setCache } from "../utils/cacheHandler.js";
+import logger from "../utils/logger.js";
 
 
 
 // INITIAL DASHBOARD (No country selected)
 const getInitialDashboard = async () => {
   try {
+    logger.info({ layer: "service", service: "dashboard", action: "getInitialDashboard", message: "Started" });
+
     const [countries, news, exchange] = await Promise.all([
       getCountryList() ,              // all countries
       getGlobalNews(),               // global finance news
       getExchangeRate("USD", "INR"), // default exchange pair
     ]);
+
+    logger.info({ layer: "service", service: "dashboard", action: "getInitialDashboard", message: "Success" });
 
     return {
       countries,
@@ -27,6 +32,7 @@ const getInitialDashboard = async () => {
     };
 
   } catch (error) {
+    logger.error({ layer: "service", service: "dashboard", action: "getInitialDashboard", error: error.message });
     throw new ApiError(500, "Failed to load initial dashboard data");
   }
 };
@@ -35,12 +41,16 @@ const getInitialDashboard = async () => {
 
 
 
-  // COUNTRY DASHBOARD SNAPSHOT (v1)
 
-   const SNAPSHOT_TTL_MINUTES = 5;
+// COUNTRY DASHBOARD SNAPSHOT (v1)
 
-  const getCountryDashboard = async (countryCode) => {
+const SNAPSHOT_TTL_MINUTES = 5;
+
+const getCountryDashboard = async (countryCode) => {
+  logger.info({ layer: "service", service: "dashboard", action: "getCountryDashboard", message: "Started", countryCode });
+
   if (!countryCode) {
+    logger.error({ layer: "service", service: "dashboard", action: "getCountryDashboard", message: "Country code missing" });
     throw new ApiError(400, "Country code is required");
   }
 
@@ -52,10 +62,10 @@ const getInitialDashboard = async () => {
   const cachedData = await getCache(redisKey);
 
   if (cachedData) {
-     console.log(" Redis HIT");
+     logger.debug({ layer: "cache", service: "dashboard", action: "getCountryDashboard", message: "Redis HIT", countryCode: upperCode });
   return cachedData;
   }
-  console.log(" Redis MISS");
+  logger.debug({ layer: "cache", service: "dashboard", action: "getCountryDashboard", message: "Redis MISS", countryCode: upperCode });
 
   // 1Get static snapshot
   const staticSnapshot = await getOrCreateStaticSnapshot(upperCode);
@@ -78,11 +88,20 @@ const getInitialDashboard = async () => {
   // Store in Redis (60 sec TTL)
    await setCache(redisKey, finalResponse, 60);
 
+   logger.info({ layer: "service", service: "dashboard", action: "getCountryDashboard", message: "Success", countryCode: upperCode });
+
    return finalResponse;
 
 };
 
+
+
+
+
+
 const generateStaticSnapshot = async (countryCode) => {
+  logger.info({ layer: "service", service: "dashboard", action: "generateStaticSnapshot", message: "Started", countryCode });
+
   const [
     countryData,
     monetaryData,
@@ -94,6 +113,8 @@ const generateStaticSnapshot = async (countryCode) => {
     getGlobalNews(),               // FIX NEWS
     getExchangeRate("USD", "INR")  // DEFAULT EXCHANGE
   ]); 
+
+  logger.info({ layer: "service", service: "dashboard", action: "generateStaticSnapshot", message: "Success", countryCode });
 
   return {
     version: "v1",
@@ -107,9 +128,14 @@ const generateStaticSnapshot = async (countryCode) => {
   };
 };
 
+
+
+
 //const SNAPSHOT_TTL_MINUTES = 5;
 
 const getOrCreateStaticSnapshot = async (countryCode) => {
+
+  logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "Started", countryCode });
 
   //const SNAPSHOT_TTL_MINUTES = 5;
   const upperCode = countryCode.toUpperCase();
@@ -121,6 +147,7 @@ const getOrCreateStaticSnapshot = async (countryCode) => {
   });
 
   if (existingSnapshot && existingSnapshot.expiresAt > now) {
+    logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "Using existing snapshot", countryCode: upperCode });
     return existingSnapshot.data;
   }
 
@@ -143,13 +170,18 @@ const getOrCreateStaticSnapshot = async (countryCode) => {
     }
   );
 
+  logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "New snapshot created", countryCode: upperCode });
+
   return staticData;
 };
 
- const refreshStaticSnapshot = async (countryCode) => {
+
+
+
+const refreshStaticSnapshot = async (countryCode) => {
+  logger.info({ layer: "service", service: "dashboard", action: "refreshStaticSnapshot", message: "Started", countryCode });
+
   const staticData = await generateStaticSnapshot(countryCode); 
-  // buildStaticLayer should fetch:
-  // monetary, macro, news, exchange, etc.
 
   const snapshotData = {
     version: "v1",
@@ -166,7 +198,11 @@ const getOrCreateStaticSnapshot = async (countryCode) => {
     { upsert: true, returnDocument: "after" }
   );
 
+  logger.info({ layer: "service", service: "dashboard", action: "refreshStaticSnapshot", message: "Success", countryCode });
+
   return snapshotData;
 };
+
+
 
 export{getInitialDashboard,getCountryDashboard,refreshStaticSnapshot,generateStaticSnapshot}

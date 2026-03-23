@@ -1,10 +1,13 @@
 import axios from "axios";
 import News from "../models/news.model.js";
 import { ApiError } from "../utils/ApiError.js";
+import logger from "../utils/logger.js";
 
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
- const getGlobalNews = async () => {
+const getGlobalNews = async () => {
+  logger.info({ layer: "externalService", service: "news", action: "getGlobalNews", message: "Started" });
+
   // Check DB cache
   const latestNews = await News.find({ category: "global" })
     .sort({ publishedAt: -1 });
@@ -14,6 +17,8 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
     const now = Date.now();
 
     if (now - lastUpdate < CACHE_DURATION) {
+      logger.info({ layer: "cache", service: "news", action: "getGlobalNews", message: "Mongo HIT" });
+
       return {
         source: "cache",
         count: latestNews.length,
@@ -26,6 +31,7 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
   const API_KEY = process.env.NEWS_API_KEY;
 
   if (!API_KEY) {
+    logger.error({ layer: "externalService", service: "news", action: "getGlobalNews", message: "API key missing" });
     throw new ApiError(500, "News API key not configured");
   }
 
@@ -34,6 +40,7 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
   );
 
   if (response.data.status !== "ok") {
+    logger.error({ layer: "externalService", service: "news", action: "getGlobalNews", message: "API failed" });
     throw new ApiError(500, "Failed to fetch news");
   }
 
@@ -53,6 +60,8 @@ const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
   //Replace Old News
   await News.deleteMany({ category: "global" });
   await News.insertMany(formattedNews);
+
+  logger.info({ layer: "externalService", service: "news", action: "getGlobalNews", message: "Success", count: formattedNews.length });
 
   return {
     source: "api",
