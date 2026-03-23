@@ -4,6 +4,7 @@ import cookieParser from "cookie-parser"
 import dashboardRoutes from "./dashboard/dashboard.routes.js"
 import exchangeRoutes from "./routes/exchangeRate.routes.js";
 import macroRoutes from "./routes/macroIndicators.routes.js";
+import calculatorRoutes from "./routes/calculator.routes.js";
 import { globalRateLimiter } from "./middlewares/rateLimiter.middleware.js";
 import helmet from "helmet";
 
@@ -32,5 +33,7 @@ app.use("/api/v1/dashboard", dashboardRoutes)
 app.use("/api/v1/exchangerates", exchangeRoutes);
 
 app.use("/api/v1/macro", macroRoutes);
+
+app.use("/api/v1/calculators", calculatorRoutes);
 
 export {app}
