@@ -6,8 +6,10 @@ import logger from "../utils/logger.js";
 
 const CACHE_EXPIRY_DAYS = 30;
 
-const getMonetaryData = async (countryInput) => {
-  logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Started", countryInput });
+const getMonetaryData = async (countryInput,context={}) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Started", countryInput });
+  }
 
   try {
     //  Resolve country from DB
@@ -35,13 +37,17 @@ const getMonetaryData = async (countryInput) => {
         (1000 * 60 * 60 * 24);
 
       if (diffDays < CACHE_EXPIRY_DAYS) {
-        logger.info({ layer: "cache", service: "monetary", action: "getMonetaryData", message: "Mongo HIT", countryCode });
+        if (context?.source !== "cron") {
+          logger.info({ layer: "cache", service: "monetary", action: "getMonetaryData", message: "Mongo HIT", countryCode });
+        }
         return existingData;
       }
     }
 
     //  Fetch fresh data from FRED
-    logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Fetching from FRED", countryCode });
+    if (context?.source !== "cron") {
+        logger.info({ message: "Fetching from FRED" });
+    }
 
     const freshData = await fetchMonetaryFromFRED(countryCode);
 
@@ -61,7 +67,9 @@ const getMonetaryData = async (countryInput) => {
       }
     );
 
-    logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Success", countryCode });
+    if (context?.source !== "cron") {
+      logger.info({ layer: "externalService", service: "monetary", action: "getMonetaryData", message: "Success", countryCode });
+    }
 
     return updated;
 

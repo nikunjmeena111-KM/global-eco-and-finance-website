@@ -5,8 +5,10 @@ import logger from "../utils/logger.js";
 
 const CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
 
-const getGlobalNews = async () => {
-  logger.info({ layer: "externalService", service: "news", action: "getGlobalNews", message: "Started" });
+const getGlobalNews = async (context = {}) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "news", action: "getGlobalNews", message: "Started" });
+  }
 
   // Check DB cache
   const latestNews = await News.find({ category: "global" })
@@ -17,7 +19,9 @@ const getGlobalNews = async () => {
     const now = Date.now();
 
     if (now - lastUpdate < CACHE_DURATION) {
-      logger.info({ layer: "cache", service: "news", action: "getGlobalNews", message: "Mongo HIT" });
+      if (context?.source !== "cron") {
+        logger.info({ layer: "cache", service: "news", action: "getGlobalNews", message: "Mongo HIT" });
+      }
 
       return {
         source: "cache",
@@ -61,7 +65,9 @@ const getGlobalNews = async () => {
   await News.deleteMany({ category: "global" });
   await News.insertMany(formattedNews);
 
-  logger.info({ layer: "externalService", service: "news", action: "getGlobalNews", message: "Success", count: formattedNews.length });
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "news", action: "getGlobalNews", message: "Success", count: formattedNews.length });
+  }
 
   return {
     source: "api",

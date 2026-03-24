@@ -6,8 +6,10 @@ import logger from "../utils/logger.js";
 // Cache duration (10 minutes)
 const CACHE_DURATION = 10 * 60 * 1000;
 
-const getExchangeRate = async (from, to) => {
-  logger.info({ layer: "externalService", service: "exchangeRate", message: "Started", from, to });
+const getExchangeRate = async (from, to, context = {}) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "exchangeRate", message: "Started", from, to });
+  }
 
   from = from.toUpperCase();
   to = to.toUpperCase();
@@ -21,7 +23,9 @@ const getExchangeRate = async (from, to) => {
 
     //  If cache is still valid → return cached data
     if (now - lastUpdated < CACHE_DURATION) {
-      logger.info({ layer: "externalService", service: "exchangeRate", message: "Cache hit", from, to });
+      if (context?.source !== "cron") {
+        logger.info({ layer: "externalService", service: "exchangeRate", message: "Cache hit", from, to });
+      }
 
       return {
         from,
@@ -42,7 +46,9 @@ const getExchangeRate = async (from, to) => {
   }
 
   try {
-    logger.info({ layer: "externalService", service: "exchangeRate", message: "Calling external API", from });
+    if (context?.source !== "cron") {
+      logger.info({ layer: "externalService", service: "exchangeRate", message: "Calling external API", from });
+    }
 
     const response = await axios.get(
       `https://v6.exchangerate-api.com/v6/${API_KEY}/latest/${from}`
@@ -59,10 +65,12 @@ const getExchangeRate = async (from, to) => {
     const updatedRate = await ExchangeRate.findOneAndUpdate(
       { from, to },
       { rate },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
 
-    logger.info({ layer: "externalService", service: "exchangeRate", message: "API success", from, to });
+    if (context?.source !== "cron") {
+      logger.info({ layer: "externalService", service: "exchangeRate", message: "API success", from, to });
+    }
 
     return {
       from,

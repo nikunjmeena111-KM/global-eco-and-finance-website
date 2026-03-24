@@ -18,8 +18,10 @@ const REDIS_TTL = 60 * 60 * 24; // 24 hours
 
 
 // Convert country name → countryCode
-const getCountryCodeByName = async (countryName) => {
-  logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryCodeByName", message: "Started", countryName });
+const getCountryCodeByName = async (countryName, context = {}) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryCodeByName", message: "Started", countryName });
+  }
 
   const country = await Country.findOne({
     name: { $regex: new RegExp(`^${countryName}$`, "i") },
@@ -36,8 +38,10 @@ const getCountryCodeByName = async (countryName) => {
 
 
 
-const fetchIndicator = async (countryCode, indicatorKey, indicatorCode) => {
-  logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Started", countryCode, indicatorKey });
+const fetchIndicator = async (countryCode, indicatorKey, indicatorCode, context = {}) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Started", countryCode, indicatorKey });
+  }
 
   const redisKey = `macro:${countryCode}:${indicatorKey}`;
   console.log("Checking Redis for:", redisKey);
@@ -63,7 +67,9 @@ if (cachedRedis) {
     EX: REDIS_TTL,
   });
 
-  logger.info({ layer: "cache", service: "macroIndicators", action: "fetchIndicator", message: "Mongo HIT", countryCode, indicatorKey });
+  if (context?.source !== "cron") {
+    logger.info({ layer: "cache", service: "macroIndicators", action: "fetchIndicator", message: "Mongo HIT", countryCode, indicatorKey });
+  }
 
   return existing.data;
 }
@@ -74,7 +80,9 @@ if (cachedRedis) {
   let response;
 
   try {
-    logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Calling external API", indicatorKey });
+    if (context?.source !== "cron") {
+      logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Calling external API", indicatorKey });
+    }
 
     response = await axios.get(url);
   } catch (error) {
@@ -112,7 +120,7 @@ if (cachedRedis) {
       expiry: expiryDate,
     },
    {
-    new: true,
+    returnDocument: "after",
     upsert: true,
      setDefaultsOnInsert: true,
   }
@@ -124,7 +132,9 @@ await redisClient.set(redisKey, JSON.stringify(cleanedData), {
   EX: REDIS_TTL,
 });
 
-logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Data processed and cached", indicatorKey });
+if (context?.source !== "cron") {
+  logger.info({ layer: "externalService", service: "macroIndicators", action: "fetchIndicator", message: "Data processed and cached", indicatorKey });
+}
 
 return cleanedData;
 
@@ -135,21 +145,23 @@ return cleanedData;
 
 
 
-const getCountryMacroData = async (countryName) => {
-  logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Started", countryName });
+const getCountryMacroData = async (countryName, context = {}) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Started", countryName });
+  }
 
   if (!countryName) {
     logger.error({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Country name missing" });
     throw new ApiError(400, "Country name is required");
   }
 
-  const countryCode = await getCountryCodeByName(countryName);
+  const countryCode = await getCountryCodeByName(countryName, context);
 
   const indicatorEntries = Object.entries(INDICATORS);
 
   const values = await Promise.all(
     indicatorEntries.map(([key, indicatorCode]) =>
-      fetchIndicator(countryCode, key, indicatorCode)
+      fetchIndicator(countryCode, key, indicatorCode, context)
     )
   );
    //console.log("Macro values:", values);
@@ -159,7 +171,9 @@ const getCountryMacroData = async (countryName) => {
     result[key] = values[index];  
   });
 
-  logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Success", countryName });
+  if (context?.source !== "cron") {
+    logger.info({ layer: "externalService", service: "macroIndicators", action: "getCountryMacroData", message: "Success", countryName });
+  }
 
   return {
     country: countryName,

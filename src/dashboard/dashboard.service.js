@@ -18,9 +18,9 @@ const getInitialDashboard = async () => {
     logger.info({ layer: "service", service: "dashboard", action: "getInitialDashboard", message: "Started" });
 
     const [countries, news, exchange] = await Promise.all([
-      getCountryList() ,              // all countries
-      getGlobalNews(),               // global finance news
-      getExchangeRate("USD", "INR"), // default exchange pair
+      getCountryList() ,              
+      getGlobalNews(),               
+      getExchangeRate("USD", "INR"), 
     ]);
 
     logger.info({ layer: "service", service: "dashboard", action: "getInitialDashboard", message: "Success" });
@@ -36,8 +36,6 @@ const getInitialDashboard = async () => {
     throw new ApiError(500, "Failed to load initial dashboard data");
   }
 };
- 
-
 
 
 
@@ -55,76 +53,89 @@ const getCountryDashboard = async (countryCode) => {
   }
 
   const upperCode = countryCode.toUpperCase();
-
   const redisKey = `dashboard:v1:${upperCode}`;
 
-  // 1️ Check Redis First
   const cachedData = await getCache(redisKey);
 
   if (cachedData) {
-     logger.debug({ layer: "cache", service: "dashboard", action: "getCountryDashboard", message: "Redis HIT", countryCode: upperCode });
-  return cachedData;
+    logger.debug({ layer: "cache", service: "dashboard", action: "getCountryDashboard", message: "Redis HIT", countryCode: upperCode });
+    return cachedData;
   }
+
   logger.debug({ layer: "cache", service: "dashboard", action: "getCountryDashboard", message: "Redis MISS", countryCode: upperCode });
 
-  // 1Get static snapshot
   const staticSnapshot = await getOrCreateStaticSnapshot(upperCode);
 
-  // Fetch dynamic data fresh
-  const stockQuote = await getStockQuote(upperCode).catch(() => null);
+  const stockQuoteResult = await getStockQuote(upperCode)
+    .then(data => ({ status: "ok", data }))
+    .catch(() => ({ status: "failed", data: null }));
 
-  //  Merge into final structure
-  const finalResponse= {
-    version: staticSnapshot.version,
-    countryCode: staticSnapshot.countryCode,
-
-    static: staticSnapshot.static,
-
-    dynamic: {
-      stockIndex: stockQuote || null,
+  const finalResponse = {
+    meta: {
+      country: upperCode,
+      version: staticSnapshot.version,
+      timestamp: new Date().toISOString(),
+      source: "mixed"
     },
+    data: {
+      static: staticSnapshot.static,
+      dynamic: {
+        stockIndex: stockQuoteResult.data
+      }
+    },
+    status: {
+      stock: stockQuoteResult.status
+    }
   };
 
-  // Store in Redis (60 sec TTL)
-   await setCache(redisKey, finalResponse, 60);
+  await setCache(redisKey, finalResponse, 60);
 
-   logger.info({ layer: "service", service: "dashboard", action: "getCountryDashboard", message: "Success", countryCode: upperCode });
+  logger.info({ layer: "service", service: "dashboard", action: "getCountryDashboard", message: "Success", countryCode: upperCode });
 
-   return finalResponse;
-
+  return finalResponse;
 };
 
 
 
 
 
+const generateStaticSnapshot = async (countryCode,context={} ) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "service", service: "dashboard", action: "generateStaticSnapshot", message: "Started", countryCode });
+  }
 
-const generateStaticSnapshot = async (countryCode) => {
-  logger.info({ layer: "service", service: "dashboard", action: "generateStaticSnapshot", message: "Started", countryCode });
-
-  const [
-    countryData,
-    monetaryData,
-    newsData,
-    defaultExchange
-  ] = await Promise.all([
+  const results = await Promise.allSettled([
     getCountryData(countryCode),
-    getMonetaryData(countryCode),
-    getGlobalNews(),               // FIX NEWS
-    getExchangeRate("USD", "INR")  // DEFAULT EXCHANGE
-  ]); 
+    getMonetaryData(countryCode,context),
+    getGlobalNews(context),
+    getExchangeRate("USD", "INR",context)
+  ]);
 
-  logger.info({ layer: "service", service: "dashboard", action: "generateStaticSnapshot", message: "Success", countryCode });
+  const [countryRes, monetaryRes, newsRes, exchangeRes] = results;
+
+  const staticData = {
+    country: countryRes.status === "fulfilled" ? countryRes.value : null,
+    monetary: monetaryRes.status === "fulfilled" ? monetaryRes.value : null,
+    news: newsRes.status === "fulfilled" ? newsRes.value : null,
+    exchange: exchangeRes.status === "fulfilled" ? exchangeRes.value : null,
+  };
+
+  const status = {
+    country: countryRes.status === "fulfilled" ? "ok" : "failed",
+    monetary: monetaryRes.status === "fulfilled" ? "ok" : "failed",
+    news: newsRes.status === "fulfilled" ? "ok" : "failed",
+    exchange: exchangeRes.status === "fulfilled" ? "ok" : "failed",
+  };
+
+  if (context?.source !== "cron") {
+    logger.info({ layer: "service", service: "dashboard", action: "generateStaticSnapshot", message: "Success", countryCode });
+  }
 
   return {
     version: "v1",
     countryCode,
-    static: {
-      country: countryData,
-      monetary: monetaryData,
-      news: newsData,
-      exchange: defaultExchange
-    }
+    static: staticData,
+    status
   };
 };
 
@@ -133,11 +144,12 @@ const generateStaticSnapshot = async (countryCode) => {
 
 //const SNAPSHOT_TTL_MINUTES = 5;
 
-const getOrCreateStaticSnapshot = async (countryCode) => {
+const getOrCreateStaticSnapshot = async (countryCode,context={} ) => {
 
-  logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "Started", countryCode });
+  if (context?.source !== "cron") {
+    logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "Started", countryCode });
+  }
 
-  //const SNAPSHOT_TTL_MINUTES = 5;
   const upperCode = countryCode.toUpperCase();
   const now = new Date();
 
@@ -147,11 +159,13 @@ const getOrCreateStaticSnapshot = async (countryCode) => {
   });
 
   if (existingSnapshot && existingSnapshot.expiresAt > now) {
-    logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "Using existing snapshot", countryCode: upperCode });
+    if (context?.source !== "cron") {
+      logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "Using existing snapshot", countryCode: upperCode });
+    }
     return existingSnapshot.data;
   }
 
-  const staticData = await generateStaticSnapshot(upperCode);
+  const staticData = await generateStaticSnapshot(upperCode,context);
 
   const expiresAt = new Date(
     now.getTime() + SNAPSHOT_TTL_MINUTES * 60 * 1000
@@ -170,7 +184,9 @@ const getOrCreateStaticSnapshot = async (countryCode) => {
     }
   );
 
-  logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "New snapshot created", countryCode: upperCode });
+  if (context?.source !== "cron") {
+    logger.info({ layer: "service", service: "dashboard", action: "getOrCreateStaticSnapshot", message: "New snapshot created", countryCode: upperCode });
+  }
 
   return staticData;
 };
@@ -178,10 +194,12 @@ const getOrCreateStaticSnapshot = async (countryCode) => {
 
 
 
-const refreshStaticSnapshot = async (countryCode) => {
-  logger.info({ layer: "service", service: "dashboard", action: "refreshStaticSnapshot", message: "Started", countryCode });
+const refreshStaticSnapshot = async (countryCode,context={} ) => {
+  if (context?.source !== "cron") {
+    logger.info({ layer: "service", service: "dashboard", action: "refreshStaticSnapshot", message: "Started", countryCode });
+  }
 
-  const staticData = await generateStaticSnapshot(countryCode); 
+  const staticData = await generateStaticSnapshot(countryCode,context); 
 
   const snapshotData = {
     version: "v1",
@@ -198,7 +216,9 @@ const refreshStaticSnapshot = async (countryCode) => {
     { upsert: true, returnDocument: "after" }
   );
 
-  logger.info({ layer: "service", service: "dashboard", action: "refreshStaticSnapshot", message: "Success", countryCode });
+  if (context?.source !== "cron") {
+    logger.info({ layer: "service", service: "dashboard", action: "refreshStaticSnapshot", message: "Success", countryCode });
+  }
 
   return snapshotData;
 };

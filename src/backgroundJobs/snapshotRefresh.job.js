@@ -10,7 +10,6 @@ const SNAPSHOT_TTL_MINUTES = 5;
 const startSnapshotRefreshJob = () => {
   cron.schedule("*/4 * * * *", async () => {
     logger.info({ layer: "cron", job: "snapshotRefresh", message: "Started" });
-    console.log(" Cron: Snapshot refresh started");
 
     try {
       //  Get all supported countries
@@ -18,21 +17,19 @@ const startSnapshotRefreshJob = () => {
 
       const BATCH_SIZE = 5;
 
+      let successCount = 0;
+      let failureCount = 0;
+
 for (let i = 0; i < countries.length; i += BATCH_SIZE) {
   const batch = countries.slice(i, i + BATCH_SIZE);
-
- /* console.log(
-    `🚀 Processing batch ${i / BATCH_SIZE + 1} (size: ${batch.length})`
-  );*/
 
   await Promise.all(
     batch.map(async (country) => {
       const upperCode = country.code.toUpperCase();
 
       try {
-       // console.log(`⏳ Refreshing snapshot for ${upperCode}`);
 
-        const staticData = await generateStaticSnapshot(upperCode);
+        const staticData = await generateStaticSnapshot(upperCode,{source:"cron"});
 
         const expiresAt = new Date(
           Date.now() + SNAPSHOT_TTL_MINUTES * 60 * 1000
@@ -54,21 +51,26 @@ for (let i = 0; i < countries.length; i += BATCH_SIZE) {
         const redisKey = `dashboard:v1:${upperCode}`;
         await redisClient.del(redisKey);
 
-       // logger.info({ layer: "cron", job: "snapshotRefresh", message: "Refreshed", countryCode: upperCode });
-        //console.log(` Refreshed & cache cleared for ${upperCode}`);
+        successCount++;
+
       } catch (error) {
-        //logger.error({ layer: "cron", job: "snapshotRefresh", countryCode: upperCode, error: error.message });
-        console.error(` Failed for ${upperCode}:`, error.message);
+        failureCount++;
       }
     })
   );
 }
 
-      logger.info({ layer: "cron", job: "snapshotRefresh", message: "Completed" });
-      console.log(" Cron: Snapshotrefresh completed");
+      logger.info({
+        layer: "cron",
+        job: "snapshotRefresh",
+        message: "Completed",
+        totalCountries: countries.length,
+        success: successCount,
+        failed: failureCount
+      });
+
     } catch (error) {
-      //logger.error({ layer: "cron", job: "snapshotRefresh", error: error.message });
-      console.error("Cron job error:", error.message);
+      logger.error({ layer: "cron", job: "snapshotRefresh", error: error.message });
     }
   });
 };
