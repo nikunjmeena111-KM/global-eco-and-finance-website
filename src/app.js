@@ -9,6 +9,7 @@ import calculatorRoutes from "./routes/calculator.routes.js";
 import helmet from "helmet";
 import { requestLogger } from "./middlewares/logger.middleware.js";
 import logger from "./utils/logger.js";
+import userRoutes from "./routes/user.routes.js";
 
 const app= express()
 
@@ -41,4 +42,5 @@ app.use("/api/v1/macro", macroRoutes);
 
 app.use("/api/v1/calculators", calculatorRoutes);
 
+app.use("/api/v1/users", userRoutes);
 export {app}
