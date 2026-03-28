@@ -170,7 +170,7 @@ const updateProfilePicture = asyncHandler(async (req, res) => {
     req.user._id,
     { profilePicture: uploaded.url },
     { returnDocument: "after" }
-  ).select("-password");
+  ).select("-password -refreshToken");
 
   res.status(200).json(
     new ApiResponse(200, user, "Profile updated successfully")

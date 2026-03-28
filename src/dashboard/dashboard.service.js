@@ -4,7 +4,7 @@ import { getCountryData,getCountryList  } from "../externalServices/country.serv
 import { getExchangeRate } from "../externalServices/exchangeRate.service.js";
 import { getMonetaryData } from "../externalServices/monetary.service.js";
 import { getGlobalNews } from "../externalServices/news.service.js";
-import { getStockQuote } from "../externalServices/stock.service.js";
+import { fetchUSIndexFromAPI  } from "../externalServices/stock.service.js";
 
 import {DashboardSnapshot} from "../models/dashboardSnapshot.model.js";
 import { getCache, setCache } from "../utils/cacheHandler.js";
@@ -66,7 +66,7 @@ const getCountryDashboard = async (countryCode) => {
 
   const staticSnapshot = await getOrCreateStaticSnapshot(upperCode);
 
-  const stockQuoteResult = await getStockQuote(upperCode)
+  const stockQuoteResult = await fetchUSIndexFromAPI(upperCode)
     .then(data => ({ status: "ok", data }))
     .catch(() => ({ status: "failed", data: null }));
 
@@ -80,7 +80,7 @@ const getCountryDashboard = async (countryCode) => {
     data: {
       static: staticSnapshot.static,
       dynamic: {
-        stockIndex: stockQuoteResult.data
+        stock: stockQuoteResult.data
       }
     },
     status: {
@@ -94,6 +94,7 @@ const getCountryDashboard = async (countryCode) => {
 
   return finalResponse;
 };
+
 
 
 

@@ -1,115 +1,143 @@
 import axios from "axios";
+import { redisClient } from "../db/redisClient.js";
 import { ApiError } from "../utils/ApiError.js";
+import logger from "../utils/logger.js";
 
-//const API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
 
+// 🔥 FETCH ALL US INDICES FROM API (USED BY CRON)
+const fetchUSIndexFromAPI = async (context = {}) => {
+  const API_KEY = process.env.FINNHUB_API_KEY;
 
-  // Get Stock Quote (Company or Index)
- 
-const getStockQuote = async (symbol) => {
-const API_KEY = process.env.ALPHA_VANTAGE_API_KEY; 
-
-  if (!symbol) {
-    throw new ApiError(400, "Stock symbol is required");
+  if (!API_KEY) {
+    throw new ApiError(500, "Stock API key missing");
   }
 
+  // 👉 SYMBOLS DEFINED HERE (AS YOU SAID)
+  const indices = [
+    { key: "sp500", symbol: "SPY", name: "S&P 500" },
+    { key: "nasdaq", symbol: "QQQ", name: "NASDAQ" },
+    { key: "dow", symbol: "DIA", name: "Dow Jones" }
+  ];
+
   try {
-    const response = await axios.get(
-      "https://www.alphavantage.co/query",
-      {
-        params: {
-          function: "GLOBAL_QUOTE",
-          symbol,
-          apikey: API_KEY
+    const resultsArray = await Promise.all(
+      indices.map(async (index) => {
+        try {
+          const response = await axios.get(
+            `https://finnhub.io/api/v1/quote?symbol=${index.symbol}&token=${API_KEY}`
+          );
+
+          const data = response.data;
+
+          if (!data || data.c === 0) {
+            return { key: index.key, data: null };
+          }
+
+          return {
+            key: index.key,
+            data: {
+              name: index.name,
+              symbol: index.symbol,
+              price: data.c,
+              change: data.d,
+              changePercent: data.dp,
+              lastUpdated: new Date()
+            }
+          };
+
+        } catch (error) {
+          logger.error({
+            layer: "externalService",
+            service: "stock",
+            error: error.message,
+            symbol: index.symbol
+          });
+
+          return { key: index.key, data: null };
         }
-      }
+      })
     );
 
-    //console.log("Full Quote Response:", response.data);
-    const data = response.data["Global Quote"];
+    const results = {};
+    resultsArray.forEach(({ key, data }) => {
+      results[key] = data;
+    });
 
-    if (!data || Object.keys(data).length === 0) {
-      throw new ApiError(404, "Stock data not found");
-    }
-
-    return {
-      symbol: data["01. symbol"],
-      price: data["05. price"],
-      change: data["09. change"],
-      changePercent: data["10. change percent"],
-      volume: data["06. volume"],
-      latestTradingDay: data["07. latest trading day"]
-    };
+    return results;
 
   } catch (error) {
-    console.log("Stock Quote Error:", error.response?.data || error.message);
-    throw new ApiError(500, "Failed to fetch stock data");
+    logger.error({
+      layer: "service",
+      service: "stock",
+      error: error.message
+    });
+
+    throw new ApiError(500, "Failed to fetch US indices");
   }
 };
 
 
-
-//Search Company By Name
- 
-
-const searchStock = async (keyword, exchangeCode = null) => {
-const API_KEY = process.env.ALPHA_VANTAGE_API_KEY;
-  if (!keyword) {
-    throw new ApiError(400, "Search keyword is required");
-  }
-
+// 🔥 GET US STOCK INDICES (REDIS ONLY - FOR DASHBOARD)
+const getUSStockIndices = async (context = {}) => {
   try {
-    const response = await axios.get(
-      "https://www.alphavantage.co/query",
-      {
-        params: {
-          function: "SYMBOL_SEARCH",
-          keywords: keyword,
-          apikey: API_KEY
+    const redisKeys = {
+      sp500: "stockIndex:us:sp500",
+      nasdaq: "stockIndex:us:nasdaq",
+      dow: "stockIndex:us:dow"
+    };
+
+    const results = {};
+
+    const dataArray = await Promise.all(
+      Object.entries(redisKeys).map(async ([key, redisKey]) => {
+        try {
+          const data = await redisClient.get(redisKey);
+
+          return {
+            key,
+            data: data ? JSON.parse(data) : null
+          };
+
+        } catch (error) {
+          logger.error({
+            layer: "cache",
+            service: "stock",
+            error: error.message,
+            key
+          });
+
+          return { key, data: null };
         }
-      }
+      })
     );
 
-    const matches = response.data.bestMatches;
-    //console.log("Full response:", response.data);
+    // 🔥 Convert to object
+    dataArray.forEach(({ key, data }) => {
+      results[key] = data;
+    });
 
-    if (!matches || matches.length === 0) {
-      throw new ApiError(404, "No matching companies found");
-    }
-
-    let filteredResults = matches;
-
-    // 🔥 Filter by exchange if provided
-    if (exchangeCode) {
-      filteredResults = matches.filter(item => {
-        const symbol = item["1. symbol"];
-
-        // 🇮🇳 India
-        if (exchangeCode === "NSE") return symbol.endsWith(".NS");
-        if (exchangeCode === "BSE") return symbol.endsWith(".BO");
-
-        // 🇯🇵 Japan
-        if (exchangeCode === "TSE") return item["4. region"] === "Japan";
-
-        // 🇺🇸 USA (NYSE / NASDAQ)
-        if (exchangeCode === "NYSE" || exchangeCode === "NASDAQ")
-          return item["4. region"] === "United States";
-
-        return true;
+    if (context?.source !== "cron") {
+      logger.info({
+        layer: "cache",
+        service: "stock",
+        message: "US stock indices fetched from Redis"
       });
     }
 
-    return filteredResults.slice(0, 5).map(item => ({
-      symbol: item["1. symbol"],
-      name: item["2. name"],
-      region: item["4. region"],
-      currency: item["8. currency"]
-    }));
+    return results;
 
   } catch (error) {
-    console.log("Stock Search Error:", error.response?.data || error.message);
-    throw new ApiError(500, "Failed to search stock");
+    logger.error({
+      layer: "service",
+      service: "stock",
+      error: error.message
+    });
+
+    throw new ApiError(500, "Failed to fetch US stock indices");
   }
 };
 
-export{getStockQuote,searchStock}
+export {
+  fetchUSIndexFromAPI,   // 👉 cron will use this
+  getUSStockIndices      // 👉 dashboard will use this
+};

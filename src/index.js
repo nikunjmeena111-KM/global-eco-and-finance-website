@@ -3,6 +3,7 @@ import connectDb from "./db/index.js";
 import { app } from "./app.js";
 //import { connectRedis } from "./db/redisClient.js";
 import { startSnapshotRefreshJob } from "./backgroundJobs/snapshotRefresh.job.js";
+import {updateStockCache} from "./backgroundJobs/stock.job.js"
 
 dotenv.config({
   path: "./env",
@@ -28,6 +29,7 @@ const startServer = async () => {
 
     // Start cron jobs
     startSnapshotRefreshJob();
+    updateStockCache();
 
   } catch (error) {
     console.error("Server startup failed:", error);
